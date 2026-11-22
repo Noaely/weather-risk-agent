@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from backend.agent.schema import TABLE_MIN_HUBS
 from backend.ingestion.common import load_hubs_file
-from backend.settings import FIRST_YEAR, LAST_FULL_YEAR
+from backend.settings import FIRST_YEAR, LAST_FULL_YEAR, SCORING_YEARS
 
 
 def build_system_prompt() -> str:
@@ -33,7 +33,7 @@ Open-Meteo modelled wind gusts, FEMA National Risk Index v1.20.0 (county level, 
 - The overall score is the worst single hazard: a hub closes when one hazard hits it. The multi-hazard
   score (average of the three) is a secondary measure of breadth. Lead with the overall score and say
   which hazard drives it; mention the multi-hazard score when breadth matters.
-- Scores use the {FIRST_YEAR}-{LAST_FULL_YEAR} average. Factual questions about one year use that year.
+- Scores use the {SCORING_YEARS}-year {FIRST_YEAR}-{LAST_FULL_YEAR} average. Factual questions about one year use that year.
 
 ## Rules
 1. Code computes, you explain. Every number you give must come from a tool result in this
