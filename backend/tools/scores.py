@@ -57,12 +57,16 @@ def rank_hubs(conn: sqlite3.Connection, hazard: str, region: str | None = None) 
     known = sorted((s for s in scores if _hazard_value(s, hazard) is not None),
                    key=lambda s: -_hazard_value(s, hazard))  # type: ignore[operator]
     ranking, prev, rank = [], None, 0
+    above: float | None = None   # score of the hub listed directly above
     for i, s in enumerate(known, 1):
         v = _hazard_value(s, hazard)
         if v != prev:          # equal scores share a rank (1, 2, 2, 4)
             rank, prev = i, v
         row = {"rank": rank, "hub_id": s.hub_id, "name": s.name, "region": s.region,
-               "score": v, "level": _level(s, hazard)}
+               "score": v, "level": _level(s, hazard),
+               # computed here so the model never subtracts scores itself (it did once: "2.7 points")
+               "points_behind_previous": None if above is None else round(above - v, 1)}
+        above = v
         if hazard == "overall":
             row["driven_by"] = s.worst_hazard
             row["multi_hazard"] = s.multi_hazard

@@ -30,6 +30,10 @@ external APIs at question time.
     nothing are returned in `grounding.text_unverified`. Ranges parse as two numbers ("2016-2025") and
     thousands separators are removed. Limitation: prose numbers are matched against all hubs' results,
     not the hub the sentence is about, and number words ("twelve") are not detected.
+  - **Score gaps are computed in code.** In a Stage 5 run the model wrote "only 2.7 points separate
+    them" (it subtracted 34.2 − 31.5 itself) and the text check flagged it. Root-cause fix:
+    `rank_hubs` returns `points_behind_previous` for every hub and the prompt tells the model to quote
+    it and never subtract. Re-run: the answer quoted "2.7 points behind Chicago" with no warning.
   - History is append-only (required for prompt caching and preserved thinking: assistant content,
     including thinking blocks, is stored unchanged). A failed turn is truncated off the tail so it
     cannot break the next question.
@@ -40,6 +44,30 @@ external APIs at question time.
   `AGENT_EFFORT` (default `medium`), `AGENT_THINKING` (`adaptive` | `between_tools`, the latter
   Sonnet 5.5 only, validated at startup), `AGENT_FALLBACKS` (server-side refusal fallback, beta, on).
 - **Sessions**: in-memory per `session_id` (lost on restart).
+
+### Chat UI (Stage 5)
+- `frontend/`: Vite + React + TypeScript, no UI library, plain CSS. `npm run dev` serves it on
+  port 5173; Vite proxies `/chat` and `/health` to the backend on port 8000 (same origin, no CORS).
+- Per answer: the answer text first; a **hub scores table** (winter / hurricane / flood / overall /
+  multi-hazard, worst hazard highlighted); a confidence badge; a **"How I got this"** line listing the
+  data tools called and the time taken; a visible **warning** when `grounding.text_unverified` or
+  `grounding.ungrounded` is non-empty; collapsible (closed) "Figures cited", "Assumptions", "Data sources".
+- The scores table comes from `hub_scores` in the `/chat` response: the backend looks up the scoring
+  code's numbers for every hub in `answer.hubs_referenced`. The model never fills that table, so the
+  highlight cannot be wrong even if the model's wording is.
+- Empty screen: the client's 4 example questions as one-click chips. Follow-ups reuse the
+  `session_id`; "New conversation" drops it. A loading card ("Checking the data…", elapsed seconds)
+  replaces the ~5–12 s wait, with three bouncing dots (static under `prefers-reduced-motion`).
+- **Colour**: risk levels low / moderate / high = green / amber / red on the level labels and as a soft
+  background on each score cell; hazards winter / hurricane / flood = blue / purple / teal on the
+  column headers and on the worst-hazard outline (with a "WORST" label). Colours always sit next to a
+  text label, so the table also works without colour vision.
+- **Light / dark theme**: one set of components on CSS variables; `[data-theme='dark']` swaps them.
+  Starts from the system setting (and follows it live until the user chooses); an explicit choice is
+  saved in `localStorage` and set before first paint by a small script in `index.html`. Every text
+  colour pair was checked for WCAG AA contrast (≥ 4.5:1) in both themes; the lowest is 4.81.
+- Screenshots and captions: `docs/screenshots/README.md`. `07-warning-MOCKED-light.png` is a
+  **mocked** response (browser-side) used only to show the warning.
 
 ### Storage and ingestion (Stage 2)
 - SQLite file `data/weather.db` (not committed; rebuilt with `python -m backend.ingestion.run`, ~15 s).
@@ -55,6 +83,12 @@ external APIs at question time.
   (+ `.meta.json` with version and download time) and committed; `--refresh-nri` re-downloads.
 - Units stored metric: ACIS inches → cm/mm, °F → °C. ACIS uses local standard time for the
   climate day, Open-Meteo local clock time; the 1-hour summer offset is negligible for a daily max gust.
+
+### Evaluation cases agreed so far (implemented in Stage 6, `eval/cases.yaml`)
+- The 4 client example questions, a follow-up, an out-of-scope hub (Seattle), an out-of-scope hazard
+  (earthquake), no data (2010), the Dallas false premise, a region ranking.
+- **"Which hub is the safest in the fall?"** — expect: says there is no seasonal data, may offer the
+  year-round ranking, confidence `low` (added after the user's own Stage 4 test).
 
 ## 2. Repository structure
 _TBD (Stage 7)._ See `CLAUDE.md` for the target layout.
@@ -180,6 +214,9 @@ minimum temperature at or below 1 °C, so no hidden snow days are expected; the 
 - Extreme cold ≤ −15 °C is an explicit assumption (no national standard).
 
 ## 7. Future work
+- **Seasonal / monthly scores** (e.g. "which hub is safest in the fall?"). Doable without new data,
+  because daily rows are stored: compute the same metrics per month or season. Today the agent says
+  there is no seasonal data, offers the year-round ranking and sets confidence low (user-tested).
 - Persist sessions (SQLite) so conversations survive a restart; streaming responses in the UI.
 - Tie numbers in the answer text to the hub each sentence is about (today: any hub's tool results).
 - A ranking tool for context hazards (tornado / hail / ice storm); today the agent makes one

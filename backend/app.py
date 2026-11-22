@@ -12,6 +12,7 @@ from backend.agent.config import load_config
 from backend.agent.loop import Agent, SessionStore, TurnResult
 from backend.db import connect
 from backend.settings import DB_PATH, FIRST_YEAR, LAST_FULL_YEAR
+from backend.tools.scores import all_scores
 
 app = FastAPI(title="Weather Risk Intelligence Agent")
 config = load_config()
@@ -24,8 +25,41 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
 
 
+class HazardCell(BaseModel):
+    score: float | None
+    level: str | None
+
+
+class HubSummary(BaseModel):
+    """Deterministic scores for a hub the answer references (from the scoring code, not the model)."""
+    hub_id: str
+    name: str
+    region: str
+    hazards: dict[str, HazardCell]   # winter / hurricane / flood
+    overall: float | None            # = worst single hazard
+    overall_level: str | None
+    worst_hazard: str | None
+    multi_hazard: float | None
+
+
 class ChatResponse(TurnResult):
     session_id: str
+    hub_scores: list[HubSummary] = []
+
+
+def hub_summaries(conn, hub_ids: list[str]) -> list[HubSummary]:
+    scores = all_scores(conn)
+    out = []
+    for hid in dict.fromkeys(hub_ids):           # keep the answer's order, drop duplicates
+        s = scores.get(hid)
+        if s is None:                            # model referenced something that is not a hub
+            continue
+        out.append(HubSummary(
+            hub_id=s.hub_id, name=s.name, region=s.region,
+            hazards={k: HazardCell(score=h.score, level=h.level) for k, h in s.hazards.items()},
+            overall=s.overall, overall_level=s.overall_level, worst_hazard=s.worst_hazard,
+            multi_hazard=s.multi_hazard))
+    return out
 
 
 @app.get("/health")
@@ -53,6 +87,7 @@ def chat(req: ChatRequest) -> ChatResponse:
     conn = connect()
     try:
         result = agent.run_turn(conn, session, req.message)
+        summaries = hub_summaries(conn, result.answer.hubs_referenced) if result.answer else []
     finally:
         conn.close()
-    return ChatResponse(session_id=session.id, **result.model_dump())
+    return ChatResponse(session_id=session.id, hub_scores=summaries, **result.model_dump())
