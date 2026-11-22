@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { sendMessage } from './api'
+import { AccessDenied, accessCodeRequired, checkCode, saveCode, sendMessage, storedCode } from './api'
+import { AccessGate } from './components/AccessGate'
 import { AnswerCard } from './components/AnswerCard'
 import { Loading } from './components/Loading'
 import { ThemeToggle } from './components/ThemeToggle'
@@ -18,12 +19,32 @@ interface Turn {
   response: ChatResponse | null // null while waiting
 }
 
+type Gate = 'checking' | 'locked' | 'open'
+
 export default function App() {
   const [turns, setTurns] = useState<Turn[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [input, setInput] = useState('')
+  const [gate, setGate] = useState<Gate>('checking')
+  const [gateError, setGateError] = useState<string | null>(null)
   const pending = turns.length > 0 && turns[turns.length - 1].response === null
   const bottom = useRef<HTMLDivElement>(null)
+
+  // Production asks for the shared access code; local development does not (the backend says which).
+  useEffect(() => {
+    accessCodeRequired().then((required) => setGate(required && !storedCode() ? 'locked' : 'open'))
+  }, [])
+
+  async function submitCode(code: string) {
+    const problem = await checkCode(code)
+    if (problem) {
+      setGateError(problem)
+      return
+    }
+    saveCode(code)
+    setGateError(null)
+    setGate('open')
+  }
 
   // Braces matter: an effect may only return a cleanup function, and in current browsers
   // scrollIntoView returns a Promise. A one-line arrow would return it and crash React.
@@ -41,10 +62,21 @@ export default function App() {
       response = await sendMessage(q, sessionId)
       setSessionId(response.session_id)
     } catch (e) {
+      if (e instanceof AccessDenied) {
+        // code rejected (e.g. changed on the server): drop this turn, ask for the code again
+        saveCode(null)
+        setTurns((t) => t.slice(0, -1))
+        setInput(q)
+        setGateError('Your access code was not accepted. Please enter it again.')
+        setGate('locked')
+        return
+      }
+      const network = e instanceof TypeError // fetch itself failed: no response at all
       response = {
         session_id: sessionId ?? '', answer: null, grounding: null, tool_calls: [], rounds: 0,
         latency_ms: 0, model: '', hub_scores: [], show_table: false,
-        error: e instanceof Error ? `${e.message} — is the backend running on port 8000?` : 'Request failed.',
+        error: network ? 'Could not reach the server. Check your connection and try again.'
+          : e instanceof Error ? e.message : 'Request failed.',
       }
     }
     setTurns((t) => [...t.slice(0, -1), { question: q, response }])
@@ -74,7 +106,9 @@ export default function App() {
       </header>
 
       <main>
-        {turns.length === 0 && (
+        {gate === 'locked' && <AccessGate onSubmit={submitCode} error={gateError} />}
+
+        {gate === 'open' && turns.length === 0 && (
           <section className="empty">
             <p>Ask about weather-disruption exposure of the client’s hubs. Try one of these:</p>
             <div className="chips">
@@ -101,7 +135,7 @@ export default function App() {
         <div ref={bottom} />
       </main>
 
-      <form
+      {gate === 'open' && <form
         className="composer"
         onSubmit={(e) => {
           e.preventDefault()
@@ -119,7 +153,7 @@ export default function App() {
         <button type="submit" disabled={pending || !input.trim()}>
           Ask
         </button>
-      </form>
+      </form>}
     </div>
   )
 }

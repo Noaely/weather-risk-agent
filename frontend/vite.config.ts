@@ -13,6 +13,7 @@ export default defineConfig({
     proxy: {
       '/chat': backend,
       '/health': backend,
+      '/access': backend,
     },
   },
 })

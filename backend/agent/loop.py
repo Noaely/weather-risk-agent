@@ -25,6 +25,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -88,16 +89,28 @@ class Session:
 
 
 class SessionStore:
-    """In-memory conversation memory per session_id. Lost on restart (fine for v1; see Future work)."""
+    """In-memory conversation memory per session_id. Lost on restart (fine for v1; see Future work).
 
-    def __init__(self) -> None:
-        self._sessions: dict[str, Session] = {}
+    Only server-issued ids are resumed: an unknown id (e.g. after a restart, or invented by a caller)
+    starts a fresh session with a new random id. At most `max_sessions` are kept; the least recently
+    used is dropped first, so a public deployment cannot be made to grow memory without bound.
+    """
+
+    def __init__(self, max_sessions: int = 500) -> None:
+        self._sessions: OrderedDict[str, Session] = OrderedDict()
         self._lock = threading.Lock()
+        self.max_sessions = max_sessions
 
     def get(self, session_id: str | None) -> Session:
         with self._lock:
-            sid = session_id or uuid.uuid4().hex
-            return self._sessions.setdefault(sid, Session(id=sid))
+            if session_id in self._sessions:
+                self._sessions.move_to_end(session_id)
+                return self._sessions[session_id]
+            sid = uuid.uuid4().hex
+            self._sessions[sid] = Session(id=sid)
+            while len(self._sessions) > self.max_sessions:
+                self._sessions.popitem(last=False)
+            return self._sessions[sid]
 
 
 # --------------------------------------------------------------------------- grounding

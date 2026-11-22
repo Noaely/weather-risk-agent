@@ -1,0 +1,16 @@
+# Never send secrets or local environments into the image build.
+.env
+.env.*
+.venv/
+**/node_modules/
+frontend/dist/
+.git/
+**/__pycache__/
+.pytest_cache/
+
+# Not needed at runtime
+docs/
+eval/
+tests/
+scripts/
+data/raw/probe/

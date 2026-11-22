@@ -3,6 +3,7 @@
     .venv/Scripts/python scripts/ask.py "Which Midwest hubs are most exposed to winter disruption?"
     .venv/Scripts/python scripts/ask.py --examples     # the client's 4 example questions + a follow-up
     .venv/Scripts/python scripts/ask.py --examples --quiet   # use before a demo to warm the prompt cache
+    python scripts/ask.py --url https://<service>.onrender.com --code <ACCESS_CODE> --examples --quiet
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ FOLLOW_UP = "And how does Kansas City compare on flood?"  # asked in the same se
 
 def ask(client: httpx.Client, url: str, q: str, session_id: str | None, quiet: bool) -> str:
     r = client.post(f"{url}/chat", json={"message": q, "session_id": session_id})
+    if r.status_code in (401, 429):  # access code / rate limit / daily budget on a deployment
+        sys.exit(f"{r.status_code}: {r.json().get('detail')}")
     r.raise_for_status()
     d = r.json()
     calls = ", ".join(f"{c['name']}({json.dumps(c['input'])})" for c in d["tool_calls"] if c["name"] != "submit_answer")
@@ -54,9 +57,11 @@ def main() -> None:
     p.add_argument("--examples", action="store_true")
     p.add_argument("--quiet", action="store_true", help="print only timing and tools")
     p.add_argument("--url", default="http://127.0.0.1:8000")
+    p.add_argument("--code", help="access code for a deployment (sent as X-Access-Code)")
     args = p.parse_args()
 
-    with httpx.Client(timeout=180) as client:
+    headers = {"X-Access-Code": args.code} if args.code else {}
+    with httpx.Client(timeout=180, headers=headers) as client:
         print(client.get(f"{args.url}/health").json())
         if args.examples:
             first = ask(client, args.url, EXAMPLES[0], None, args.quiet)

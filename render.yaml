@@ -1,0 +1,30 @@
+# Render Blueprint: one Docker web service (API + built UI). https://render.com/docs/blueprint-spec
+# Secrets use `sync: false`: Render asks for their values in the Dashboard; they are never in this repo.
+services:
+  - type: web
+    name: weather-risk-agent
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free                # switch to "starter" (no sleep) while reviewers have the link
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ACCESS_CODE        # the shared code for reviewers, at least 8 characters
+        sync: false
+      - key: APP_ENV            # production: the app refuses to start without ACCESS_CODE
+        value: production
+      - key: ANALYSIS_LAST_YEAR # pins the period to the shipped database snapshot (2016-2025)
+        value: "2025"
+      - key: AGENT_MODEL
+        value: claude-sonnet-5-5
+      - key: AGENT_EFFORT
+        value: medium
+      - key: RATE_PER_IP_HOUR
+        value: "40"
+      - key: RATE_GLOBAL_HOUR
+        value: "60"
+      - key: FAILED_CODES_PER_IP_HOUR
+        value: "10"
+      - key: DAILY_SPEND_CAP_USD
+        value: "1.00"

@@ -30,6 +30,7 @@ import yaml  # noqa: E402
 
 from backend.agent.config import load_config  # noqa: E402
 from backend.agent.loop import Agent, Session, TurnResult, numbers_in  # noqa: E402
+from backend.agent.pricing import cost_usd as cost  # noqa: E402
 from backend.agent.tool_defs import HANDLERS  # noqa: E402
 from backend.db import connect  # noqa: E402
 from backend.tools.metric import get_hub_metric  # noqa: E402
@@ -38,23 +39,12 @@ from backend.tools.scores import all_scores, rank_hubs  # noqa: E402
 CASES_FILE = ROOT / "eval" / "cases.yaml"
 RESULTS_DIR = ROOT / "eval" / "results"
 
-# USD per million tokens (Anthropic first-party list prices; 5-minute cache writes = 1.25x input).
-PRICES = {
-    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00, "cache_write": 2.50, "cache_read": 0.10},
-    "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_write": 5.00, "cache_read": 0.20},
-}
 # Pre-run estimate per question, measured in the Stage 6 runs (Sonnet medium: $0.23 for 21 questions;
 # Opus medium: $0.27 for 6 hard ones), rounded up so the budget guard errs on the safe side.
 EST_PER_TURN = {"claude-sonnet-5-5": 0.015, "claude-opus-5-5": 0.05}
 
 SNAKE_CASE = re.compile(r"\b[a-z]+(?:_[a-z0-9]+)+\b")   # tool names, field names, hub ids
 
-
-def cost(usage: dict[str, int], model: str) -> float:
-    p = PRICES.get(model, PRICES["claude-opus-5-5"])  # unknown model: assume the pricier one
-    return (usage.get("input_tokens", 0) * p["input"] + usage.get("output_tokens", 0) * p["output"]
-            + usage.get("cache_creation_input_tokens", 0) * p["cache_write"]
-            + usage.get("cache_read_input_tokens", 0) * p["cache_read"]) / 1e6
 
 
 # --------------------------------------------------------------------------- expected values

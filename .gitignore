@@ -7,8 +7,10 @@ __pycache__/
 # Secrets
 .env
 
-# Local database (rebuilt by the ingestion script)
+# Local databases are rebuilt by the ingestion script; data/weather.db is committed on purpose as the
+# snapshot the deployment serves (2016-2025). Re-run ingestion only to deliberately refresh it.
 data/*.db
+!data/weather.db
 data/*.db-journal
 
 # Frontend
