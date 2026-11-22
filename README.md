@@ -36,7 +36,7 @@ numbers" warning looks.
 > per answer).**
 
 - The demo is protected by an **access code**, shared privately with reviewers. It is never in this
-  repository.
+  repository. The first screen asks for it once per browser tab; the chat appears after it is accepted.
 - Start with the four example questions on the first screen, then ask your own; follow-up questions keep
   the conversation's context.
 - Usage limits protect the API budget: 40 questions per hour per visitor, 60 per hour in total, and a
@@ -61,10 +61,10 @@ cd frontend && npm install && cd ..
 
 | Part | Command | Notes |
 |---|---|---|
-| Ingestion | `python -m backend.ingestion.run` | Builds `data/weather.db` (~15 s). Safe to re-run. |
+| Ingestion (optional) | `python -m backend.ingestion.run` | The repo already ships `data/weather.db` (the 2016–2025 snapshot), so you can skip this. Re-running it (~15 s) refetches the data and **changes the committed file**. |
 | Backend | `python -m uvicorn backend.app:app --port 8000` | `GET /health`, `POST /chat` |
 | Frontend | `cd frontend && npm run dev` | Open http://localhost:5173 (proxies to the backend) |
-| Eval | `python eval/run_eval.py` | 19 cases, ~1 min, ~$0.25 of API usage |
+| Eval | `python eval/run_eval.py` | 19 cases, ~2 min, ~$0.25 of API usage |
 | Eval, dry run | `python eval/run_eval.py --dry-run` | Free: shows every expected value, no API calls |
 | Tests | `python -m pytest` | 85 tests, no API calls |
 
@@ -146,7 +146,7 @@ This was built with Claude Code in one day, in reviewed stages:
    the FEMA data source on ArcGIS) and changed course when the data said so — e.g. the overall score became
    the worst hazard, and a planned county-area correction was dropped after a check across all US counties.
    Every decision is in the [decisions log](docs/ARCHITECTURE.md#11-decisions-log).
-5. **API spend was planned**: the eval and the model comparison were estimated before running and cost $0.98.
+5. **API spend was planned**: the eval and the model comparison were estimated before running and cost $0.99.
 
 The full Claude Code sessions are exported in **[docs/sessions/](docs/sessions/)**: part 1 is the plan and
 the review of CLAUDE.md; part 2 covers stages 1–6.

@@ -1,5 +1,10 @@
 # CLAUDE.md — Weather Risk Intelligence Agent
 
+> **Note for readers:** this is the original brief and working rules given to Claude Code at the start,
+> lightly updated as decisions were made. It is kept as written for the record. The **current design**
+> is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); where the two differ, ARCHITECTURE.md is correct
+> (for example, ingestion also uses NOAA ACIS station data, and the planned `alerts/` bonus was not built).
+
 ## Context
 Home assignment for a Forward Deployed Engineer role (Moveo / Wonderful).
 Fictional client: a US logistics company with regional distribution hubs. Analysts need to decide

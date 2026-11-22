@@ -289,7 +289,7 @@ confidence: high|medium|low, data_sources[]}`.
 - **Answer card**: the answer first; a **hub scores table** (winter, hurricane, flood, overall,
   multi-hazard) with the worst hazard outlined; a confidence badge; a **"How I got this"** line listing
   the data tools called and the time taken; a **warning** when the grounding check reports numbers no
-  tool returned; collapsible (closed) figures cited, assumptions and data sources.
+  tool returned; collapsible (closed) reasoning, figures cited, assumptions and data sources.
 - The table is filled by the backend from the scoring code (`hub_scores` in the `/chat` response), never
   by the model. It is open by default for rankings and comparisons (2+ hubs) and behind a show/hide
   toggle for single-hub answers.
@@ -348,6 +348,7 @@ Opus 5.5 costs about 3× more per answer.
   addresses (section 6).
 - Three hazards are scored (winter, hurricane, flood). Tornado, hail and ice storm are context only;
   earthquakes, wildfire, heat and others are out of scope.
+- **Voice input was not built** (an optional bonus in the brief); the chat interface is text only.
 - No seasonal or monthly scores, no forecasts, no financial losses: the agent says so instead of guessing.
 - **"Last year" = calendar year 2025** (Jan–Dec). NWS NOWData shows Jul–Jun snow seasons by default,
   so season totals there will not match.

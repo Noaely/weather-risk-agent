@@ -87,6 +87,12 @@ export function AnswerCard({ response }: { response: ChatResponse }) {
       <Provenance response={response} />
 
       <div className="details">
+        {a.reasoning && (
+          <details>
+            <summary>Reasoning</summary>
+            <p className="reasoning">{a.reasoning}</p>
+          </details>
+        )}
         {a.scores.length > 0 && (
           <details>
             <summary>Figures cited ({a.scores.length})</summary>
