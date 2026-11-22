@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 import httpx
 
@@ -47,6 +48,7 @@ def ask(client: httpx.Client, url: str, q: str, session_id: str | None, quiet: b
 
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252; answers may contain ≥ or °
     p = argparse.ArgumentParser()
     p.add_argument("question", nargs="*")
     p.add_argument("--examples", action="store_true")
