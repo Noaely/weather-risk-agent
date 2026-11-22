@@ -51,7 +51,7 @@ explain decisions as you go.
   measurable-snow days: station 26, confirmed on NOWData; Open-Meteo 38).
 - **Open-Meteo Historical Weather API** — **daily max wind gusts only**, requested at the station
   coordinates. No API key. No free source of measured daily peak gusts exists (NCEI `WSFG` is empty).
-- **FEMA National Risk Index, December 2025** — long-term county-level layer for hurricane, inland/coastal
+- **FEMA National Risk Index, December 2025 (v1.20.0)** — long-term county-level layer for hurricane, inland/coastal
   flood, winter weather (+ tornado, hail, ice storm as context). We use the **annualized frequency
   (`*_AFREQ`, events per year)** fields, not `*_RISKS` (which includes dollar exposure and social
   vulnerability and saturates near 100 for big counties). `hazards.fema.gov` blocks our network

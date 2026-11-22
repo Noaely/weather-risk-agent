@@ -7,6 +7,21 @@ _TBD (Stage 4–5)._ Target flow: React chat UI → FastAPI `POST /chat` → age
 tools) → pure Python tool functions → SQLite. A separate ingestion script fills SQLite from public
 APIs; the agent never calls external APIs at question time (except the optional live-alert tool).
 
+### Storage and ingestion (Stage 2)
+- SQLite file `data/weather.db` (not committed; rebuilt with `python -m backend.ingestion.run`, ~15 s).
+  Schema in `backend/db.py`: `hubs`, `daily_weather`, `nri`, `ingestion_runs`.
+- **Raw daily rows, not aggregates**: one row per hub per local calendar day (12 × 3,653 = 43,836),
+  so any metric or threshold can be recomputed without re-fetching.
+- Station columns (ACIS) and the gust column (Open-Meteo) are upserted by separate steps, so each
+  source can be re-run alone. Every row stores the `ingestion_runs.id` that wrote it; each run stores
+  its period, URL and data-quality counts (trace/missing per hub, Open-Meteo grid cell).
+- Re-running is idempotent (upserts keyed on `(hub_id, date)` / `(hub_id, field)`); hubs removed from
+  `hubs.json` are deleted with their data.
+- NRI: the selected fields for all 3,232 counties are snapshotted to `data/raw/nri_counties.csv`
+  (+ `.meta.json` with version and download time) and committed; `--refresh-nri` re-downloads.
+- Units stored metric: ACIS inches → cm/mm, °F → °C. ACIS uses local standard time for the
+  climate day, Open-Meteo local clock time; the 1-hour summer offset is negligible for a daily max gust.
+
 ## 2. Repository structure
 _TBD (Stage 7)._ See `CLAUDE.md` for the target layout.
 
@@ -15,7 +30,7 @@ _TBD (Stage 7)._ See `CLAUDE.md` for the target layout.
 | Source | Access | What we use | Verified |
 |---|---|---|---|
 | Open-Meteo Historical (archive) API | `archive-api.open-meteo.com/v1/archive`, no key | daily `snowfall_sum` (cm), `precipitation_sum` (mm), `temperature_2m_min` (°C), `wind_gusts_10m_max` (km/h), `timezone=auto` | 365/365 days for 2025, 0 nulls (Denver, Miami) |
-| FEMA National Risk Index, **December 2025** release | ArcGIS feature service `services.arcgis.com/XG15cJAlne2vxtgt/.../National_Risk_Index_Counties/FeatureServer/0` (owner `FEMA_NationalRiskIndex`) | county fields per hazard: `*_AFREQ`, `*_ALRB`, `*_ALR_NPCTL`, `*_RISKS` | all 12 hub FIPS match the expected county and state |
+| FEMA National Risk Index, **December 2025 (v1.20.0)** release | ArcGIS feature service `services.arcgis.com/XG15cJAlne2vxtgt/.../National_Risk_Index_Counties/FeatureServer/0` (owner `FEMA_NationalRiskIndex`) | county fields per hazard: `*_AFREQ`, `*_ALRB`, `*_ALR_NPCTL`, `*_RISKS` | all 12 hub FIPS match the expected county and state |
 | NOAA ACIS (`data.rcc-acis.org/StnData`) — the service behind NWS "NOWData" | POST JSON, no key | official airport climate stations: daily snow (in), min temp (°F), precipitation (in) | 3,653/3,653 days 2016–2025 for all 12 stations; `M` = missing, `T` = trace |
 | NWS `api.weather.gov/alerts/active` (bonus) | GET, generic `User-Agent` header | active alerts per hub point | HTTP 200 for Denver and Miami |
 
@@ -24,7 +39,7 @@ Notes
   `www.fema.gov` works. The same NRI data is published by FEMA on ArcGIS Online, which we use instead:
   `https://services.arcgis.com/XG15cJAlne2vxtgt/arcgis/rest/services/National_Risk_Index_Counties/FeatureServer/0`
   (item page `https://www.arcgis.com/home/item.html?id=39485e8035d446a5bff03259508ae355`, owner
-  account `FEMA_NationalRiskIndex` / "FEMA National Risk Index (NRI)"; field `NRI_VER` = "December 2025".
+  account `FEMA_NationalRiskIndex` / "FEMA National Risk Index (NRI)"; field `NRI_VER` = "December 2025"; release version 1.20.0, confirmed on the item page, Living Atlas).
   Older releases are separate services under the same account, e.g. "(March 2023)"). A snapshot of all
   counties is saved to `data/raw/` at ingestion, so the app does not depend on this service at runtime.
 - NRI December 2025 renamed riverine flooding to **Inland Flooding (`IFLD_*`)**.
