@@ -189,6 +189,25 @@ def test_ranges_and_thousands_are_parsed_correctly():
     assert numbers_in("min -15 C, 2,024.1 mm, 7.14%") == [-15.0, 2024.1, 7.14]
 
 
+@needs_db
+def test_missing_api_key_gives_a_clear_error_not_a_500():
+    from backend.agent.loop import NO_KEY_MESSAGE
+    from backend.db import connect
+
+    class NoKeyClient:
+        def __init__(self):
+            def create(**kwargs):  # what the SDK raises when no credentials are configured
+                raise TypeError('"Could not resolve authentication method. Expected one of api_key, '
+                                'auth_token, or credentials to be set."')
+            self.messages = NS(create=create)
+            self.beta = NS(messages=NS(create=create))
+
+    session = SessionStore().get(None)
+    res = Agent(load_config(), client=NoKeyClient()).run_turn(connect(), session, "hi")
+    assert res.error == NO_KEY_MESSAGE and res.answer is None
+    assert session.messages == []  # rolled back
+
+
 # --------------------------------------------------------------------------- stop reasons and tool errors
 @needs_db
 def test_refusal_is_an_error_and_rolls_back():

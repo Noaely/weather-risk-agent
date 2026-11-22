@@ -42,6 +42,8 @@ REMINDER = ("Please deliver your reply now by calling submit_answer (also if the
 # A minus sign counts only when it does not follow a digit, so "2016-2025" is 2016 and 2025, not -2025.
 # Thousands separators ("2,024.1") are removed before matching.
 _NUMBER = re.compile(r"(?<![\d.])-?\d+(?:\.\d+)?")
+NO_KEY_MESSAGE = ("No Anthropic API key: set ANTHROPIC_API_KEY in .env (copy .env.example) "
+                  "and restart the backend.")
 
 
 def numbers_in(text: str) -> list[float]:
@@ -186,6 +188,11 @@ class Agent:
                 return done(error=f"Claude API error {e.status_code}: {e.message}")
             except anthropic.APIConnectionError:
                 return done(error="Could not reach the Claude API (network).")
+            except TypeError as e:
+                # The SDK raises TypeError (not an API error) when no credentials are configured at all.
+                if "authentication" not in str(e).lower():
+                    raise
+                return done(error=NO_KEY_MESSAGE)
             for k in usage:
                 usage[k] += getattr(resp.usage, k, 0) or 0
             res.model = resp.model

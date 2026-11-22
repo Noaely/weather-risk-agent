@@ -1,9 +1,11 @@
 """FastAPI app: POST /chat and GET /health.
 
-Run:  .venv/Scripts/python -m uvicorn backend.app:app --port 8000
+Run:  python -m uvicorn backend.app:app --port 8000   (virtualenv active)
 """
 
 from __future__ import annotations
+
+import os
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -78,7 +80,9 @@ def health() -> dict:
         conn.close()
     return {"status": "ok", "hubs": hubs, "period": f"{FIRST_YEAR}-{LAST_FULL_YEAR}",
             "last_ingestion": runs, "model": config.model, "effort": config.effort,
-            "thinking": config.thinking}
+            "thinking": config.thinking,
+            # True/False only - the key itself is never returned
+            "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY"))}
 
 
 @app.post("/chat", response_model=ChatResponse)
