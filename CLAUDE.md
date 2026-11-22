@@ -70,11 +70,11 @@ so scores stay stable over time and alerts are meaningful), then weight them.
 | Hazard | Metrics (from data, 10-year average) |
 |---|---|
 | Winter | days/yr with snowfall ≥ 2.5 cm (1 in); days/yr with min temp ≤ −15 °C; NRI winter weather `WNTW_AFREQ` |
-| Hurricane / wind | days/yr with max gusts ≥ 75 km/h (~46 mph, Open-Meteo, low weight); NRI hurricane `HRCN_AFREQ` (main weight) |
-| Flood | days/yr with precipitation ≥ 25 mm (~1 in); max 3-day precipitation; NRI inland + coastal flood `AFREQ` (lower weight — county-size bias, e.g. Maricopa/Phoenix; the agent mentions this caveat) |
+| Hurricane | NRI hurricane `HRCN_AFREQ` only. Wind gusts (days/yr ≥ 75 km/h, Open-Meteo) are **context only**: model gusts peak in the Midwest, not on the hurricane coast |
+| Flood | days/yr with precipitation ≥ 25 mm (~1 in); average of each year's max 3-day precipitation; NRI inland + coastal flood `AFREQ` (low weight — Maricopa/Phoenix is the top US county for NRI flood frequency although its measured heavy rain is the lowest of our hubs; the agent mentions this caveat). Not divided by county area: nationally the correlation with area is ~0 |
 
-Next to the overall score, always show the **worst single hazard** — an average hides one extreme
-hazard (Miami: very high hurricane, zero winter).
+Anchors are fixed at national extremes (reference stations; NRI = US county 99th percentile), so
+scores do not depend on which hubs were picked. Details in `docs/ARCHITECTURE.md` section 4.
 
 Threshold rationale (document in ARCHITECTURE.md):
 - **Measurable snowfall** = 0.1 in (0.25 cm), the NWS definition. Used for factual questions like
@@ -88,7 +88,11 @@ Threshold rationale (document in ARCHITECTURE.md):
   disruption data (which hub closed, when, and why).
 
 - Hazard score = weighted average of its metrics (0–100).
-- Overall risk score = weighted average of hazard scores.
+- **Overall risk score = the worst single hazard score**, and hubs are ranked by it. A hub closes
+  when one hazard hits it, not on an average; an average would call Memphis "low" with flood at 70 (high).
+- **Multi-hazard score** = weighted average of hazard scores, shown next to the overall as a
+  secondary number (breadth of exposure).
+- Missing days are excluded and coverage is reported; below 90% coverage a metric is unknown.
 - All thresholds and weights live in one config file (`backend/scoring/config.py`) and are documented
   as assumptions the client can tune.
 - `explain_score(hub)` must return the breakdown (each metric, its raw value, its normalized value,

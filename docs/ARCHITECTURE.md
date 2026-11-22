@@ -64,7 +64,39 @@ Open-Meteo gets totals roughly right but smooths daily extremes: too many light-
 heavy-snow and heavy-rain days. Every threshold metric in our scoring is a count of extreme days.
 
 ## 4. Scoring logic
-_TBD (Stage 3)._
+All settings live in `backend/scoring/config.py`; `metrics.py` computes raw metrics, `normalize.py`
+maps them to 0–100, `score.py` builds the breakdown. `python scripts/print_scores.py` prints the table
+and saves a timestamped snapshot (`score_runs`, `hub_scores`) for the alert job.
+
+1. **Raw metrics** over 2016–2025 (station metrics as days/yr on observed days).
+2. **Fixed-anchor normalization**: `lo → 0`, `hi → 100`, linear, clamped. Anchors come from outside
+   our hubs: station metrics from well-known extreme US stations (same code, ACIS 2016–2025);
+   NRI metrics from one rule, **100 = the US county 99th percentile**.
+3. **Hazard score** = weighted average of its metrics. **Overall score = the worst single hazard**
+   (D15); hubs are ranked by it and the answer names the hazard that drives it. The equal-weight
+   average of the hazards is reported next to it as a secondary **multi-hazard** score.
+   Levels: low < 33 ≤ moderate < 66 ≤ high.
+
+| Hazard | Metric | Anchors (0 → 100) | Weight | Anchor reference |
+|---|---|---|---|---|
+| Winter | days/yr snowfall ≥ 1 in | 0 → 25 | 0.4 | Buffalo 24.6, Duluth 24.2, Syracuse 29.4 |
+| | days/yr min temp ≤ −15 °C | 0 → 45 | 0.3 | Duluth 46, Fargo 51.7 |
+| | NRI `WNTW_AFREQ` | 0 → 41 events/yr | 0.3 | US county p99 |
+| Hurricane | NRI `HRCN_AFREQ` | 0 → 0.306 events/yr | 1.0 | US county p99 |
+| Flood | days/yr precipitation ≥ 25 mm | 0 → 25 | 0.4 | New Orleans 22.5, Mobile 20.9 |
+| | average of yearly max 3-day precipitation | 25 → 200 mm | 0.4 | ~1 in (nuisance) → ~8 in (major flood) |
+| | NRI `IFLD_AFREQ + CFLD_AFREQ` | 0 → 9.08 events/yr | 0.2 | US county p99 |
+
+Context only (returned in every breakdown, not scored): NRI tornado, hail, ice-storm frequency with
+US county percentile; Open-Meteo days/yr with gusts ≥ 75 km/h.
+
+**Missing data.** A missing day is not a dry day: it is excluded from both the count and the number
+of days, and every metric reports its coverage. Below 90% coverage a metric is unknown; an unknown
+metric makes its hazard unknown, and an unknown hazard makes the overall and multi-hazard scores
+unknown (the unknown hazard could be the worst). Nothing is filled with 0.
+(NRI `null` is different: it means the hazard does not apply in that county, so it counts as 0 events.)
+Stage 3 check: none of the 2016–2025 missing snowfall days at any hub had both precipitation and a
+minimum temperature at or below 1 °C, so no hidden snow days are expected; the rule does not rely on that.
 
 ## 5. Decisions log
 
@@ -79,6 +111,12 @@ _TBD (Stage 3)._
 | D7 | 2026-11-22 | **ACIS station data** for snowfall, min temperature, precipitation; **Open-Meteo for wind gusts only**, requested at the same station coordinates. Hubs are located at their main-airport NWS station. | Modelled data misses extreme days (table above). Denver 2025 measurable-snow days = 26 on ACIS, independently confirmed by the user on NWS NOWData (23 Jan–Jun + 3 Jul–Dec). One point per hub keeps all metrics comparable. |
 | D8 | 2026-11-22 | NRI **`*_AFREQ`** (annualized frequency, events/year) for all hazards. Flood NRI gets a lower weight; the agent mentions the Phoenix/Maricopa caveat. | Easy to explain ("~17 winter events a year in Hennepin County"); matches climate expectations for winter and hurricane. |
 | D9 | 2026-11-22 | NRI county = the county containing the station point (point query on the NRI layer). Chicago → DuPage, Kansas City → Platte, Atlanta → Clayton; the other 9 match the city's county. | Same-place rule (D7). Winter/hurricane/hail/ice frequencies barely differ between neighbouring counties (Cook 14.6 vs DuPage 14.3 winter events/yr). |
+| D10 | 2026-11-22 | Missing days excluded from count and denominator; coverage reported; < 90% coverage → unknown. | User decision: a day with no data is not a day with no snow. |
+| D11 | 2026-11-22 | **Wind gusts removed from the hurricane score**; kept as context. | Model gusts peak in the Midwest (Columbus 6.2 days/yr vs Miami 1.1). With a 25% gust weight Columbus' hurricane score would rise from 1.9 to 20.8. |
+| D12 | 2026-11-22 | **NRI flood frequency is NOT divided by county area** (config switch `FLOOD_NRI_PER_AREA`, default off). Reverses the Stage 2 plan. | Nationally, inland-flood AFREQ does not grow with area (Spearman −0.01 over 3,229 counties; tornado +0.34 does). Dividing moved Denver to the 88th and Atlanta to the 78th percentile and dropped Houston to 72nd. Phoenix is handled by the low NRI weight (0.2): its flood score is 22 (low). |
+| D13 | 2026-11-22 | 3-day precipitation metric = **average of each year's maximum**, not the 10-year maximum. | Houston's 10-year max (722 mm) is Harvey alone. |
+| D14 | 2026-11-22 | One anchor rule for all NRI metrics: 100 = US county 99th percentile (hardcoded). Anchors stay at national extremes (user confirmed). | Consistent and explainable; scores do not depend on which hubs were picked; hardcoded so an NRI refresh cannot move the scale silently. Consequence: Minneapolis winter is "moderate" (Duluth/Buffalo are worse). |
+| D15 | 2026-11-22 | **Overall score = worst single hazard**; hubs ranked by it. Weighted average kept as a secondary "multi-hazard" score. Replaces CLAUDE.md's original "overall = weighted average". | User decision: the client picks hubs for resilience investment, and a hub closes when one hazard hits it. The hazards are largely geographically exclusive, so the average compressed 10 of 12 hubs to "low" — e.g. Memphis flood 70 (high) but average 28 (low). |
 
 ## 6. Assumptions & limitations
 - **Hub list is assumed** (client gave none): 12 hubs in `data/hubs.json`, chosen to cover every city
@@ -91,10 +129,15 @@ _TBD (Stage 3)._
 - ACIS codes: `T` (trace) counts as 0 for every threshold; `M` (missing) is stored as NULL and
   excluded from both the count and the number of observed days.
 - Open-Meteo returns the nearest model grid cell, not the exact point; we store the returned coordinates.
-- **NRI `AFREQ` for localized hazards scales with county size.** Inland flood and tornado
-  frequencies count events anywhere in the county: Cook (1,651 sq mi) has 5.9 flood events/yr vs
-  DuPage (340 sq mi) 2.8, while winter is the same (14.6 vs 14.3). Maricopa (~9,200 sq mi) therefore
-  tops the flood list. Addressed in Stage 3.
+- **NRI county size.** Stage 2 suspected that inland-flood frequency scales with county area (Cook
+  5.9 vs DuPage 2.8 events/yr). The national check in Stage 3 does not support this for flood
+  (Spearman −0.01) but does for tornado (+0.34), so tornado frequency — context only — is higher in
+  large counties. Maricopa (Phoenix) is the top US county for inland-flood frequency although its
+  measured heavy-rain days are the lowest of our hubs; NRI flood has a low weight and the agent should
+  mention this caveat for Phoenix.
+- **Worst-hazard overall** ignores breadth: a hub moderately exposed to two hazards can rank below
+  a hub with one slightly higher hazard. The multi-hazard score is shown next to it for that reason.
+  A combined method (e.g. probability any hazard disrupts the hub) would need client disruption data.
 - Open-Meteo free tier is for non-commercial use; a production deployment needs the commercial plan.
 - Open-Meteo is reanalysis/model data, not measurements (see section 3); wind gusts are model gusts and
   understate thunderstorm and hurricane gusts.

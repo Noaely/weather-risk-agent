@@ -65,6 +65,23 @@ CREATE TABLE IF NOT EXISTS nri (
     run_id   INTEGER REFERENCES ingestion_runs(id),
     PRIMARY KEY (hub_id, field)
 );
+
+-- Scores are saved with a timestamp so the (bonus) alert job can compare against the previous run.
+CREATE TABLE IF NOT EXISTS score_runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    computed_at   TEXT NOT NULL,      -- UTC ISO timestamp
+    period        TEXT NOT NULL,      -- e.g. 2016-2025
+    config_hash   TEXT NOT NULL       -- changes when thresholds/anchors/weights change
+);
+
+CREATE TABLE IF NOT EXISTS hub_scores (
+    run_id   INTEGER NOT NULL REFERENCES score_runs(id) ON DELETE CASCADE,
+    hub_id   TEXT NOT NULL,
+    hazard   TEXT NOT NULL,           -- 'winter' | 'hurricane' | 'flood' | 'overall'
+    score    REAL,                    -- NULL = unknown
+    level    TEXT,
+    PRIMARY KEY (run_id, hub_id, hazard)
+);
 """
 
 
