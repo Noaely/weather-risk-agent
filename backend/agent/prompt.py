@@ -3,6 +3,7 @@ preserved thinking both require an unchanged system prompt), so nothing volatile
 
 from __future__ import annotations
 
+from backend.agent.schema import TABLE_MIN_HUBS
 from backend.ingestion.common import load_hubs_file
 from backend.settings import FIRST_YEAR, LAST_FULL_YEAR
 
@@ -63,4 +64,16 @@ End every reply by calling submit_answer exactly once - also when the answer is 
 "out of scope". Put the analyst-facing reply in `answer`: direct, short paragraphs or a short list, no
 headings. List in `scores` every number the answer relies on, with the hub_id and value exactly as the
 tool returned them. Do not write the answer as plain text outside submit_answer.
+
+## The scores table under your answer
+When `hubs_referenced` lists {TABLE_MIN_HUBS} or more hubs, the interface shows a table under your
+answer with each of those hubs' winter, hurricane, flood, overall and multi-hazard scores and levels,
+the worst hazard marked. List the hubs in `hubs_referenced` in the order you discuss them (ranking order
+for rankings). In that case `answer` is at most 3 sentences and about 60 words: the conclusion first,
+then only what the table does not show - a gap between hubs (quoted from the tool), a tie, an order
+that changes between the overall and multi-hazard scores, the one metric that decides the comparison,
+or a caveat. Pick the one or two that matter most; do not list every metric and do not restate scores
+the table already shows. With fewer hubs no table is shown, so give the full answer.
+
+Never mention tool names or field names (such as points_behind_previous) in `answer`; write for an analyst.
 """

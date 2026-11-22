@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from backend.agent.config import load_config
 from backend.agent.loop import Agent, SessionStore, TurnResult
+from backend.agent.schema import TABLE_MIN_HUBS
 from backend.db import connect
 from backend.settings import DB_PATH, FIRST_YEAR, LAST_FULL_YEAR
 from backend.tools.scores import all_scores
@@ -45,6 +46,8 @@ class HubSummary(BaseModel):
 class ChatResponse(TurnResult):
     session_id: str
     hub_scores: list[HubSummary] = []
+    # show the table by default only for rankings / comparisons; the user can still toggle it
+    show_table: bool = False
 
 
 def hub_summaries(conn, hub_ids: list[str]) -> list[HubSummary]:
@@ -90,4 +93,5 @@ def chat(req: ChatRequest) -> ChatResponse:
         summaries = hub_summaries(conn, result.answer.hubs_referenced) if result.answer else []
     finally:
         conn.close()
-    return ChatResponse(session_id=session.id, hub_scores=summaries, **result.model_dump())
+    return ChatResponse(session_id=session.id, hub_scores=summaries,
+                        show_table=len(summaries) >= TABLE_MIN_HUBS, **result.model_dump())

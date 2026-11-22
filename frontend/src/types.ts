@@ -54,4 +54,5 @@ export interface ChatResponse {
   latency_ms: number
   model: string
   hub_scores: HubSummary[]
+  show_table: boolean // backend rule: table open by default for 2+ hubs (rankings, comparisons)
 }

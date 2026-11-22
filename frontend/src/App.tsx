@@ -43,7 +43,7 @@ export default function App() {
     } catch (e) {
       response = {
         session_id: sessionId ?? '', answer: null, grounding: null, tool_calls: [], rounds: 0,
-        latency_ms: 0, model: '', hub_scores: [],
+        latency_ms: 0, model: '', hub_scores: [], show_table: false,
         error: e instanceof Error ? `${e.message} — is the backend running on port 8000?` : 'Request failed.',
       }
     }

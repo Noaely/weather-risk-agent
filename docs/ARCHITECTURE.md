@@ -55,6 +55,13 @@ external APIs at question time.
 - The scores table comes from `hub_scores` in the `/chat` response: the backend looks up the scoring
   code's numbers for every hub in `answer.hubs_referenced`. The model never fills that table, so the
   highlight cannot be wrong even if the model's wording is.
+- **Table shown by default only for rankings and comparisons** (`TABLE_MIN_HUBS = 2` hubs, in
+  `backend/agent/schema.py`); single-hub answers (Denver, Dallas) keep it behind a per-answer
+  show/hide toggle. The same constant is stated in the system prompt, so when a table will be shown
+  the model writes at most ~3 short sentences (~60 words): the conclusion plus what the table does not
+  show (a gap, a tie, an order change between overall and multi-hazard, the deciding metric, a
+  caveat). No extra model call: the rule is known before the model writes. Measured on real answers:
+  Midwest ranking 111 → 54 words, Miami vs Houston 165 → 54 words; single-hub answers unchanged.
 - Empty screen: the client's 4 example questions as one-click chips. Follow-ups reuse the
   `session_id`; "New conversation" drops it. A loading card ("Checking the data…", elapsed seconds)
   replaces the ~5–12 s wait, with three bouncing dots (static under `prefers-reduced-motion`).

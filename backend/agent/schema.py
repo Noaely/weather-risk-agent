@@ -7,6 +7,12 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+# The UI shows the hub scores table automatically when the answer references at least this many hubs
+# (rankings and comparisons). The same rule is stated in the system prompt, so the model knows when to
+# keep its text short instead of repeating the table. One constant, used by both.
+TABLE_MIN_HUBS = 2
+
+
 class ScoreItem(BaseModel):
     hub_id: str = Field(description="hub_id exactly as returned by a tool, e.g. 'kansas_city'")
     name: str = Field(description="what the value is, e.g. 'flood score', 'overall score', "

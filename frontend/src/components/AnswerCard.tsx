@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ChatResponse, ToolCall } from '../types'
 import { HubScoresTable } from './HubScoresTable'
 
@@ -28,6 +29,22 @@ function Provenance({ response }: { response: ChatResponse }) {
         : dataCalls.map(describe).join(' · ')}
       <span className="muted"> — {seconds}s</span>
     </p>
+  )
+}
+
+/** The hub scores table with a show/hide toggle. Open by default only when the backend says so
+ *  (rankings and comparisons, 2+ hubs); the model wrote a short answer in that case. */
+function ScoresSection({ response }: { response: ChatResponse }) {
+  const [open, setOpen] = useState(response.show_table)
+  const n = response.hub_scores.length
+  if (n === 0) return null
+  return (
+    <>
+      <button className="link-button" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {open ? '▾ Hide scores table' : `▸ Show scores table (${n} hub${n > 1 ? 's' : ''})`}
+      </button>
+      {open && <HubScoresTable hubs={response.hub_scores} />}
+    </>
   )
 }
 
@@ -65,7 +82,7 @@ export function AnswerCard({ response }: { response: ChatResponse }) {
         </div>
       )}
 
-      <HubScoresTable hubs={response.hub_scores} />
+      <ScoresSection response={response} />
 
       <Provenance response={response} />
 
