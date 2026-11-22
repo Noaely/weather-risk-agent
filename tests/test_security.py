@@ -142,6 +142,18 @@ def test_true_client_ip_is_used_and_x_forwarded_for_is_ignored():
     assert client_ip(req({"X-Forwarded-For": "1.2.3.4"})) == ("10.0.0.1", "socket")   # forgeable, not trusted
 
 
+def test_api_docs_are_not_published_in_production():
+    import os
+    import subprocess
+    import sys
+    code = ("from fastapi.testclient import TestClient; import backend.app as a; c = TestClient(a.app); "
+            "print(c.get('/docs').status_code, c.get('/openapi.json').status_code)")
+    env = {**os.environ, "APP_ENV": "production", "ACCESS_CODE": CODE}
+    out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=120)
+    # with the built UI mounted at "/", unknown paths are 404 from the static handler
+    assert out.stdout.split() == ["404", "404"], out.stderr[-500:]
+
+
 @pytest.mark.skipif(not (FRONTEND_DIST / "index.html").exists(), reason="run npm run build first")
 @needs_db
 def test_built_ui_is_served_on_the_same_origin(client):

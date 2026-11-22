@@ -5,7 +5,7 @@ services:
     name: weather-risk-agent
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: free                # switch to "starter" (no sleep) while reviewers have the link
+    plan: free                # decision D18: free tier (sleeps after 15 idle min; ~1 min first load)
     healthCheckPath: /health
     envVars:
       - key: ANTHROPIC_API_KEY

@@ -27,6 +27,23 @@ More in [`docs/screenshots/`](docs/screenshots/README.md). Note: `07-warning-MOC
 **mocked response, not a real answer** — it was created in the browser only to show how the "check these
 numbers" warning looks.
 
+## Live demo
+
+**https://weather-risk-agent-vh6p.onrender.com**
+
+> **The demo runs on Render's free tier, so if it hasn't been used for 15 minutes, the page can take
+> about a minute to load while the server wakes up. After that it responds normally (about 5-10 seconds
+> per answer).**
+
+- The demo is protected by an **access code**, shared privately with reviewers. It is never in this
+  repository.
+- Start with the four example questions on the first screen, then ask your own; follow-up questions keep
+  the conversation's context.
+- Usage limits protect the API budget: 40 questions per hour per visitor, 60 per hour in total, and a
+  $1/day cap on Claude API spend. If a limit is reached, the page says so.
+- It runs exactly the code in this repository (one Render service built from the `Dockerfile`), on the
+  2016–2025 data snapshot in `data/weather.db`. Deployment details: [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## How to run
 
 **Needs:** Python 3.12, Node.js 20.19+ or 22.12+, an Anthropic API key, internet access (for ingestion and the Claude API).
@@ -49,7 +66,7 @@ cd frontend && npm install && cd ..
 | Frontend | `cd frontend && npm run dev` | Open http://localhost:5173 (proxies to the backend) |
 | Eval | `python eval/run_eval.py` | 19 cases, ~1 min, ~$0.25 of API usage |
 | Eval, dry run | `python eval/run_eval.py --dry-run` | Free: shows every expected value, no API calls |
-| Tests | `python -m pytest` | 70 tests, no API calls |
+| Tests | `python -m pytest` | 85 tests, no API calls |
 
 Without the UI: `python scripts/ask.py "Which hubs in the Midwest are most exposed to winter disruption?"`.
 The model is set in `.env` (`AGENT_MODEL`, default `claude-sonnet-5-5`; `claude-opus-5-5` also works).
@@ -101,9 +118,15 @@ in [ARCHITECTURE.md § 10](docs/ARCHITECTURE.md#10-assumptions-uncertainty-and-l
 - **Overall = worst hazard** ignores breadth of exposure; the multi-hazard average is shown next to it.
 - **"Last year" = calendar year 2025.** Missing station days are excluded, never counted as zero
   (coverage ≥ 97 % for every hub).
-- **The API has no authentication or rate limiting**, so anyone who can reach it can use it and spend the
-  API credit behind it. It is for local use and **not ready for public exposure as-is**.
-- Open-Meteo's free tier is for non-commercial use. Sessions are kept in memory. Not deployed.
+- **The live demo is a demo, not a production service:**
+  - access is **one shared access code**, no user accounts;
+  - **per-IP and global rate limits** (40 and 60 questions per hour) and a **$1/day cap** on Claude API spend;
+  - Render's **free tier**: after 15 minutes without use the first page load takes about a minute (cold start);
+  - **sessions are lost on restart or redeploy** (conversations live in memory), and so are the rate-limit
+    and spend counters;
+  - a **fixed 2016–2025 data snapshot** (no nightly ingestion);
+  - a **single instance** — limits and sessions are not shared across instances, so it cannot scale out as-is.
+- Open-Meteo's free tier is for non-commercial use.
 
 ## How I worked
 
@@ -117,7 +140,8 @@ This was built with Claude Code in one day, in reviewed stages:
    of modelled data, NRI frequency instead of NRI risk scores, a 10-year window).
 3. **Seven stages, each ending with a check and my approval**: data check → ingestion → scoring → agent →
    chat UI → evaluation → docs. One git commit per stage. (An eighth, bonus stage — score-change
-   alerts — was planned but not built.)
+   alerts — was planned but not built.) Deployment followed the same way: a plan with costs first,
+   then the build, tests and a local production-mode check before anything went live.
 4. **Decisions with evidence**: I verified key facts independently (Denver's snowfall days on NWS NOWData,
    the FEMA data source on ArcGIS) and changed course when the data said so — e.g. the overall score became
    the worst hazard, and a planned county-area correction was dropped after a check across all US counties.
@@ -130,11 +154,12 @@ the review of CLAUDE.md; part 2 covers stages 1–6.
 ## Repository
 
 ```
-backend/    FastAPI app, agent loop, tools, scoring, ingestion, SQLite schema
+backend/    FastAPI app, agent loop, tools, scoring, ingestion, SQLite schema, security (access code, limits)
 frontend/   React + TypeScript chat UI (Vite, no UI library)
-data/       hubs.json (assumed hub list), raw/ (FEMA NRI snapshot)
+data/       hubs.json (assumed hub list), weather.db (2016–2025 snapshot), raw/ (FEMA NRI snapshot)
 eval/       cases.yaml, run_eval.py, results/ (saved runs with every answer)
-tests/      70 pytest tests
-scripts/    data check, data report, score table, command-line client
-docs/       ARCHITECTURE.md, screenshots/, sessions/
+tests/      85 pytest tests
+scripts/    data check, data report, score table, command-line client, deployment smoke test
+docs/       ARCHITECTURE.md, DEPLOY.md, screenshots/, sessions/
+Dockerfile, render.yaml   the deployment (one Render service: API + built UI)
 ```

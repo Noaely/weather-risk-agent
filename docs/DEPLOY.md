@@ -7,7 +7,7 @@ one URL and no CORS. It is built from the repo's `Dockerfile` and configured by 
 
 | Part | Where | Cost |
 |---|---|---|
-| API + UI (one Docker service) | Render web service | Free while testing (sleeps after 15 min idle, ~30–60 s to wake); Starter while reviewers have the link (check the price on render.com/pricing) |
+| API + UI (one Docker service) | Render web service, **free tier** (decision D18) | $0. Sleeps after 15 min without traffic; the next page load takes about a minute. The paid Starter instance removes that, if ever needed |
 | Claude API | Anthropic | ~$0.01 per answer; capped at $1/day by the app |
 | Data | `data/weather.db` (committed snapshot, 2016–2025) inside the image | — |
 
@@ -36,8 +36,9 @@ All other settings (`APP_ENV=production`, `ANALYSIS_LAST_YEAR=2025`, model, rate
    ```
    Note what it reports for `rate limiter keys on`: `true-client-ip` means each visitor has their own
    limit; `socket` means all visitors share one (safe, but stricter).
-4. Before sending the link: service → **Settings → Instance type → Starter** (no sleeping), re-run the
-   smoke test, then send the URL and the code separately.
+4. Send the URL and the code **separately** (the README's Live demo section has the URL and the
+   cold-start note; the code is never in the repo). The service stays on the free tier (D18); to remove
+   cold starts later: service → **Settings → Instance type → Starter**.
 5. Before a live demo: 2–3 minutes ahead, wake the service and warm the prompt cache (~$0.06):
    ```bash
    python scripts/ask.py --url https://<service>.onrender.com --code <ACCESS_CODE> --examples --quiet

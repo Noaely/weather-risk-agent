@@ -57,27 +57,58 @@ Contents: [1 Components](#1-components-and-how-they-talk) · [2 Repository](#2-r
 
 The agent never calls an external API at question time; all weather and risk data is read from SQLite.
 
+### Deployment and access control
+The live demo (https://weather-risk-agent-vh6p.onrender.com) is **one Render web service** built from
+the repo's `Dockerfile`: the FastAPI backend also serves the built UI, so the browser talks to one
+origin and the code locally and in production is the same. Configuration is in `render.yaml`;
+step-by-step instructions in [DEPLOY.md](DEPLOY.md).
+
+- **Data**: the image contains the committed `data/weather.db` snapshot (2016–2025); nothing is
+  ingested at deploy time, so a deploy cannot fail because a public data API is down, and the answers
+  match the documented numbers. `ANALYSIS_LAST_YEAR=2025` pins the period to that snapshot.
+- **Secrets**: `ANTHROPIC_API_KEY` and `ACCESS_CODE` exist only in Render's environment settings
+  (`sync: false` in `render.yaml`); `.dockerignore` keeps `.env` out of the image. Checked after going
+  live: no key in the repository's history or in the shipped JavaScript.
+- **Access control** (`backend/security.py`), enforced by the backend on **every `/chat` request**,
+  not only in the UI:
+  1. one shared **access code** (header `X-Access-Code`, constant-time comparison); 10 wrong codes per
+     IP per hour block that IP for the hour. With `APP_ENV=production` the app refuses to start without
+     a code, so it cannot be deployed open by mistake;
+  2. a **$1/day cap** on Claude API spend, counted from each answer's real token usage;
+  3. **rate limits**: 40 questions per visitor IP and 60 in total per rolling hour.
+  The visitor IP is read from `True-Client-IP` (set by Cloudflare in front of Render — confirmed on the
+  live service), never from `X-Forwarded-For`, which a caller can forge there.
+- Sessions resume only server-issued ids and are capped at 500. The API docs pages (`/docs`,
+  `/openapi.json`) are not published in production.
+- **Free tier**: the service sleeps after 15 minutes without traffic, and the first request then waits
+  about a minute (decision D18).
+
 ## 2. Repository structure
 
 ```
 backend/
   settings.py           paths and the analysis period (last full year, 10-year window)
   db.py                 SQLite schema and connection
-  app.py                FastAPI: POST /chat, GET /health
+  app.py                FastAPI: POST /chat, POST /access, GET /health; serves the built UI
+  security.py           access code, rate limits, daily spend cap
   ingestion/            acis.py (station data), open_meteo.py (gusts), nri.py (FEMA NRI snapshot),
                         common.py (hub sync, run bookkeeping), run.py (CLI)
   scoring/              config.py (all thresholds, anchors, weights), metrics.py, normalize.py, score.py
   tools/                hubs.py (aliases, list_hubs), scores.py (rank/compare/explain), metric.py
   agent/                config.py (.env model settings), prompt.py, tool_defs.py, schema.py
-                        (response contract), loop.py (agent loop, grounding, sessions)
+                        (response contract), loop.py (agent loop, grounding, sessions), pricing.py
 frontend/               Vite + React + TypeScript chat UI (src/App.tsx, src/components/, src/index.css)
 data/
   hubs.json             the 12 hubs (assumed list; replace with the client's)
+  weather.db            the SQLite database: committed snapshot the deployment serves (2016-2025)
   raw/                  nri_counties.csv snapshot (+ .meta.json); probe/ = raw samples from the data check
 eval/                   cases.yaml, run_eval.py, results/ (saved runs with every answer)
-tests/                  70 pytest tests (parsing, data sanity, scoring, tools, agent loop, API, eval checks)
-scripts/                probe_sources.py (data check), data_report.py, print_scores.py, ask.py (CLI client)
-docs/                   ARCHITECTURE.md, screenshots/, sessions/ (Claude Code session exports)
+tests/                  85 pytest tests (parsing, data sanity, scoring, tools, agent loop, API, eval
+                        checks, security)
+scripts/                probe_sources.py (data check), data_report.py, print_scores.py, ask.py (CLI
+                        client), smoke_test.py (checks a deployment)
+docs/                   ARCHITECTURE.md, DEPLOY.md, screenshots/, sessions/ (Claude Code session exports)
+Dockerfile, render.yaml the deployment: one Render service (API + built UI)
 CLAUDE.md               project brief and working rules for Claude Code
 ```
 
@@ -247,7 +278,8 @@ confidence: high|medium|low, data_sources[]}`.
 - `.env` settings: `AGENT_MODEL` (default `claude-sonnet-5-5`), `AGENT_EFFORT` (default `medium`),
   `AGENT_THINKING` (`adaptive`, or `between_tools` on Sonnet 5.5 only — validated at startup),
   `AGENT_FALLBACKS` (server-side refusal fallback, on).
-- Sessions are kept in memory per `session_id` and lost on restart.
+- Sessions are kept in memory per `session_id` (only server-issued ids resume; at most 500, least
+  recently used dropped first) and lost on restart or redeploy.
 
 ## 8. Chat UI
 
@@ -350,11 +382,20 @@ Opus 5.5 costs about 3× more per answer.
 - Answers vary slightly between runs; the eval checks structure, numbers and wording, not exact text.
 - Sessions live in memory and are lost when the backend restarts.
 
-**Operations**
-- **The API has no authentication and no rate limiting.** Anyone who can reach `/chat` can use it —
-  and spend the Anthropic API credit behind it. It is meant for local use and is **not ready for public
-  exposure as-is**: it would need authentication, per-user rate limits and a spend cap first.
-- Not deployed; no monitoring or request logging beyond the server console.
+**Operations (the live demo)** — a demo deployment, not a production service:
+- **One shared access code**, no user accounts: anyone with the code has full access, and access cannot
+  be revoked for one person without changing the code for everyone.
+- **Per-IP and global rate limits** (40 and 60 questions per rolling hour) and a **$1/day cap** on
+  Claude API spend. These bound the cost of misuse; they do not identify users.
+- **Free-tier cold starts**: after 15 minutes without traffic the service sleeps, and the first page
+  load takes about a minute while it wakes up (D18).
+- **Sessions are lost on restart or redeploy** (they live in memory), and so are the rate-limit and
+  spend counters — a redeploy therefore also resets the day's spend.
+- **Fixed 2016–2025 data snapshot**: no nightly ingestion; refreshing the data means re-running
+  ingestion, committing the new snapshot and redeploying.
+- **Single instance**: limits and sessions are kept in that instance's memory, so the service cannot be
+  scaled out as-is (it would need a shared store such as Redis).
+- No monitoring or request logging beyond Render's service logs.
 
 ## 11. Decisions log
 
@@ -378,6 +419,9 @@ All decisions were made during the build stage by stage (see `docs/sessions/`).
 | D14 | One anchor rule for NRI: 100 = US county 99th percentile; anchors stay at national extremes. | Consistent, explainable, independent of which hubs were picked; hardcoded so a data refresh cannot move the scale. |
 | D15 | **Overall score = worst single hazard**; hubs ranked by it; weighted average kept as "multi-hazard". Replaces the brief's "overall = weighted average". | The client invests per hub and a hub closes when one hazard hits it. The average compressed 10 of 12 hubs to "low" (Memphis: flood 70, average 28). |
 | D16 | Keep **Sonnet 5.5 at effort medium**; Opus 5.5 and low effort stay config options. | Eval: Sonnet medium 19/19, median 5.7 s, $0.23 per run; low effort not faster; Opus ~2× slower, ~3× cost, same result on hard cases. |
+| D17 | Deploy as **one Render web service** (the backend serves the built UI), not Vercel for the frontend plus a separate backend host. | In-memory sessions and per-instance state rule out serverless functions without adding a shared store; one service means one URL, one deploy, no CORS, and the same code path as local. (Vercel's time limit was checked and was not the blocker: 300 s on Hobby vs 6–20 s answers.) |
+| D18 | Stay on Render's **free tier**; no upgrade to the paid Starter instance. The README states the cold start clearly. | Cost vs. a documented delay: the free tier costs nothing, and its only drawback for a demo is a ~1-minute first load after 15 idle minutes, which is announced on the Live demo section; answers after that are unaffected (~5–10 s). The paid instance (~$7/month, third-party figure) would only remove that first-load wait. |
+| D19 | Protect the public demo with **one shared access code**, **per-IP (40/h) and global (60/h) rate limits**, **10 wrong codes per IP per hour**, and a **$1/day spend cap**; all enforced by the backend on every request. | No accounts are needed for a handful of reviewers, but an open endpoint would let anyone spend the API credit. The limits bound the worst case to $1/day. 40/h per IP (not 20) because several reviewers may share one office IP. |
 
 ## 12. Future work
 - **Seasonal / monthly scores** ("which hub is safest in the fall?"): possible without new data,
@@ -388,6 +432,9 @@ All decisions were made during the build stage by stage (see `docs/sessions/`).
 - **Score-change alerts**: score snapshots are already stored with a settings hash; a nightly job would
   recompute, compare and post to a webhook. Live NWS alerts per hub (API verified, not wired in).
 - Measured peak gusts (NOAA ISD hourly data) so wind can be scored.
-- Persist sessions; stream answers in the UI; tie text numbers to the hub each sentence is about.
+- Persist sessions and limit counters in a shared store (e.g. Redis) so restarts keep conversations and
+  the service can run more than one instance; stream answers in the UI; tie text numbers to the hub
+  each sentence is about.
+- For real use: per-user accounts (e.g. company single sign-on) instead of one shared code, monitoring,
+  and an always-on instance (no cold starts).
 - A ranking tool for context hazards (today the agent makes one metric call per hub, in parallel).
-- Deployment (not done in this version).

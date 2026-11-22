@@ -24,7 +24,13 @@ from backend.settings import DB_PATH, FIRST_YEAR, FRONTEND_DIST, LAST_FULL_YEAR
 from backend.tools.scores import all_scores
 
 guard = Guard.from_env()          # raises at startup if production is misconfigured
-app = FastAPI(title="Weather Risk Intelligence Agent")
+# FastAPI's interactive docs (/docs, /redoc, /openapi.json) are useful locally but not published in
+# production: they hold no secrets, but a private demo has no reason to advertise its API.
+_public_docs = os.getenv("APP_ENV") != "production"
+app = FastAPI(title="Weather Risk Intelligence Agent",
+              docs_url="/docs" if _public_docs else None,
+              redoc_url="/redoc" if _public_docs else None,
+              openapi_url="/openapi.json" if _public_docs else None)
 config = load_config()
 agent = Agent(config)
 sessions = SessionStore()
