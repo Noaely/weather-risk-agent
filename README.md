@@ -148,8 +148,13 @@ This was built with Claude Code in one day, in reviewed stages:
    Every decision is in the [decisions log](docs/ARCHITECTURE.md#11-decisions-log).
 5. **API spend was planned**: the eval and the model comparison were estimated before running and cost $0.99.
 
-The full Claude Code sessions are exported in **[docs/sessions/](docs/sessions/)**: part 1 is the plan and
-the review of CLAUDE.md; part 2 covers stages 1–6.
+The full Claude Code sessions are exported in **[docs/sessions/](docs/sessions/)**:
+
+- [Part 1](docs/sessions/2026-11-22-part1-plan-and-decisions.txt) — the plan and the review of CLAUDE.md.
+- [Part 2](docs/sessions/2026-11-22-part2-stages-1-to-6.txt) — stages 1–6: data check, ingestion, scoring,
+  agent, chat UI, evaluation.
+- [Part 3](docs/sessions/2026-11-22-part3-docs-and-deployment.txt) — stage 7 (README and design doc),
+  deployment to Render with the access code and limits, and the final check against the assignment.
 
 ## Repository
 
