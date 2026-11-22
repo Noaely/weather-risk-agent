@@ -3,9 +3,43 @@
 > Status: Stage 1 (setup & data check). Sections marked _TBD_ are filled in later stages.
 
 ## 1. Components and how they talk
-_TBD (Stage 4–5)._ Target flow: React chat UI → FastAPI `POST /chat` → agent loop (Anthropic SDK +
-tools) → pure Python tool functions → SQLite. A separate ingestion script fills SQLite from public
-APIs; the agent never calls external APIs at question time (except the optional live-alert tool).
+React chat UI (Stage 5) → FastAPI `POST /chat` (`backend/app.py`) → agent loop (`backend/agent/loop.py`,
+plain Anthropic SDK) → tool functions (`backend/tools/`, pure Python over SQLite) → scoring
+(`backend/scoring/`). A separate ingestion script fills SQLite from public APIs; the agent never calls
+external APIs at question time.
+
+### Agent (Stage 4)
+- **Tools** (all `strict: true`, enums limit hazards / regions / metrics to what we compute):
+  `list_hubs(region?)`, `rank_hubs(hazard, region?)`, `compare_hubs(hubs[], hazards[]?)`,
+  `get_hub_metric(hub, metric, year?)`, `explain_score(hub, hazard?)`, and `submit_answer` (the
+  response contract). Tools resolve aliases ("DFW", "Kansas City, MO"), return units, thresholds,
+  period, coverage and source, and return `not_found` / `no_data` as normal results, never exceptions.
+  Caveats (county NRI far above station data, near-tied hazards, low coverage, tornado vs county size)
+  are generated from the data, not hard-coded per hub.
+- **Loop** (one user question = one turn): call Claude → run every tool call of that response → send
+  all results back in one message → repeat until `submit_answer` (max 8 model calls).
+  - Forced `tool_choice` returns a 400 on Sonnet 5.5 / Opus 5.5, so `submit_answer` is required by
+    the prompt plus code: a reply without it gets one reminder; a second miss is a clear error.
+  - `submit_answer` input is validated with Pydantic (`backend/agent/schema.py`); one retry, then an error.
+  - **Grounding check**: every number in `scores[]` must appear in a tool result for that hub in the
+    session (rounding tolerance only). One retry listing the offending values; if still ungrounded the
+    answer is returned with `grounding.ok = false`.
+  - **Text check (warning, never blocks)**: every number written in the `answer` text is matched
+    (display-rounding tolerance) against all tool results in the session, the numbers in the system
+    prompt (thresholds, level cut-offs, years, hub count) and the user's question. Numbers that match
+    nothing are returned in `grounding.text_unverified`. Ranges parse as two numbers ("2016-2025") and
+    thousands separators are removed. Limitation: prose numbers are matched against all hubs' results,
+    not the hub the sentence is about, and number words ("twelve") are not detected.
+  - History is append-only (required for prompt caching and preserved thinking: assistant content,
+    including thinking blocks, is stored unchanged). A failed turn is truncated off the tail so it
+    cannot break the next question.
+- **Caching**: breakpoint 1 on the system prompt (tools + system ≈ 3.7k tokens, shared by every
+  question and session), breakpoint 2 automatic at the end of the history. Verified: a new question
+  reads 3,694 cached tokens and writes none.
+- **Model settings** (`.env`, `backend/agent/config.py`): `AGENT_MODEL` (default `claude-sonnet-5-5`),
+  `AGENT_EFFORT` (default `medium`), `AGENT_THINKING` (`adaptive` | `between_tools`, the latter
+  Sonnet 5.5 only, validated at startup), `AGENT_FALLBACKS` (server-side refusal fallback, beta, on).
+- **Sessions**: in-memory per `session_id` (lost on restart).
 
 ### Storage and ingestion (Stage 2)
 - SQLite file `data/weather.db` (not committed; rebuilt with `python -m backend.ingestion.run`, ~15 s).
@@ -146,5 +180,9 @@ minimum temperature at or below 1 °C, so no hidden snow days are expected; the 
 - Extreme cold ≤ −15 °C is an explicit assumption (no national standard).
 
 ## 7. Future work
+- Persist sessions (SQLite) so conversations survive a restart; streaming responses in the UI.
+- Tie numbers in the answer text to the hub each sentence is about (today: any hub's tool results).
+- A ranking tool for context hazards (tornado / hail / ice storm); today the agent makes one
+  `get_hub_metric` call per hub (in parallel, one round).
 - NOAA GHCN-Daily / ISD for measured peak gusts (hourly ISD has gusts; daily summaries do not).
 - Calibrate thresholds and weights against the client's historical disruption records.

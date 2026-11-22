@@ -37,6 +37,7 @@ class MetricValue(BaseModel):
     value: float | None          # None = unknown (no data or coverage too low)
     unit: str
     period: str                  # e.g. "2016-2025" or "2025"
+    count: int | None = None     # qualifying days (day-count metrics only)
     observed_days: int | None = None
     expected_days: int | None = None
     coverage: float | None = None    # 0-1; None for NRI metrics
@@ -86,7 +87,7 @@ def day_count_metric(rows: list[DailyRow], key: str, start_year: int, end_year: 
             value = round(count / len(observed) * expected / years, 2)
     return MetricValue(
         key=key, value=value, unit="% of days" if as_percent else "days/yr", period=label,
-        observed_days=len(observed), expected_days=expected, coverage=round(coverage, 4),
+        count=count, observed_days=len(observed), expected_days=expected, coverage=round(coverage, 4),
         source=_source(column),
         note=f"threshold: {threshold}; {count} qualifying days out of {len(observed)} observed",
     )
@@ -165,9 +166,12 @@ def nri_metric(conn: sqlite3.Connection, hub_id: str, key: str, per_area: bool =
                            source=SOURCE_NRI, note="no NRI data for this hub's county")
     value = round(_nri_raw(fields, rows, per_area), 4)
     not_applicable = [f for f in fields if rows.get(f) is None]
-    note = f"{label}: {value:g} events/yr in the county"
+    note = f"{label}: {value:.3g} events/yr in the county"
     note += f"{' per 1,000 sq mi' if per_area else ''}; US county percentile {national_percentile(fields, value, per_area)}"
     if not_applicable:
         note += f"; {', '.join(not_applicable)} not applicable in this county (counted as 0)"
+    if key == "nri_tornado_freq":
+        note += ("; county-wide count: larger counties record more tornadoes (US rank correlation with "
+                 "county area +0.34), so compare hubs with care")
     return MetricValue(key=key, value=value, unit="events/yr per 1,000 sq mi" if per_area else "events/yr",
                        period="NRI long-term", source=SOURCE_NRI, note=note)
